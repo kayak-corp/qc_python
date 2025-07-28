@@ -29,13 +29,26 @@ python qc_check.py
 ## 📦 Method 2: Standalone Executable
 
 ### **Create Executable:**
+
+**On Windows:**
+```cmd
+# Use the Windows build script
+build_windows.bat
+
+# Or manually:
+python create_executable.py
+```
+
+**On macOS/Linux:**
 ```bash
 # Run the packaging script
 python create_executable.py
 ```
 
 This creates:
-- `dist/DispenserQCAnalyzer.exe` - Standalone executable
+- **Windows**: `dist/DispenserQCAnalyzer.exe` - Standalone executable
+- **macOS**: `dist/DispenserQCAnalyzer` - App bundle
+- **Linux**: `dist/DispenserQCAnalyzer` - Binary executable
 - `distribution/` folder - Complete package with example data
 
 ### **Distribute:**

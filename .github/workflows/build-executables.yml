@@ -1,0 +1,144 @@
+name: Build Executables
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+    
+    - name: Create Windows executable
+      run: python create_executable.py
+    
+    - name: Upload Windows executable
+      uses: actions/upload-artifact@v4
+      with:
+        name: DispenserQCAnalyzer-Windows
+        path: distribution/
+        retention-days: 30
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+    
+    - name: Create macOS executable
+      run: python create_executable.py
+    
+    - name: Upload macOS executable
+      uses: actions/upload-artifact@v4
+      with:
+        name: DispenserQCAnalyzer-macOS
+        path: distribution/
+        retention-days: 30
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+    
+    - name: Create Linux executable
+      run: python create_executable.py
+    
+    - name: Upload Linux executable
+      uses: actions/upload-artifact@v4
+      with:
+        name: DispenserQCAnalyzer-Linux
+        path: distribution/
+        retention-days: 30
+
+  create-release:
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts/
+    
+    - name: Create release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          artifacts/DispenserQCAnalyzer-Windows/distribution/*
+          artifacts/DispenserQCAnalyzer-macOS/distribution/*
+          artifacts/DispenserQCAnalyzer-Linux/distribution/*
+        body: |
+          # Dispenser QC Analyzer v${{ github.ref_name }}
+          
+          ## Downloads
+          
+          ### Windows
+          - Download the Windows executable for Windows 7+ systems
+          - No Python installation required
+          - Double-click to run
+          
+          ### macOS
+          - Download the macOS app for macOS 10.12+ systems
+          - No Python installation required
+          - Double-click to run
+          
+          ### Linux
+          - Download the Linux binary for Ubuntu 16.04+ systems
+          - No Python installation required
+          - Run from terminal: `./DispenserQCAnalyzer`
+          
+          ## Installation
+          
+          1. Download the appropriate file for your operating system
+          2. Extract the archive
+          3. Run the executable
+          4. No additional installation required!
+          
+          ## Features
+          
+          - ✅ Fluorescence-based QC analysis
+          - ✅ Multi-chip support
+          - ✅ Advanced visualization
+          - ✅ Professional GUI
+          - ✅ Example data included
+          
+          ## Support
+          
+          For issues or questions, please open an issue on GitHub.
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
