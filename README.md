@@ -48,6 +48,19 @@ pip install pandas numpy matplotlib scipy tkinter
 1. Clone the repository
 2. Run the analyzer:
 
+**Windows Users:**
+```cmd
+# GUI mode (recommended)
+run_gui.bat
+
+# Command line mode
+run_cli.bat
+
+# Or directly with Python
+python qc_check.py
+```
+
+**Mac/Linux Users:**
 ```bash
 # GUI mode
 python qc_check.py
@@ -112,12 +125,14 @@ python qc_check.py --file "data.csv" --target 60 --concentrations "600,300,150,7
 
 ```
 ├── qc_check.py              # Main analyzer script
-├── test_multi_chip.py       # Multi-chip plotting test
+├── run_gui.bat             # Windows GUI launcher
+├── run_cli.bat             # Windows CLI launcher
+├── test_multi_chip.py      # Multi-chip plotting test
 ├── README.md               # This file
+├── requirements.txt         # Python dependencies
 ├── .gitignore              # Git ignore rules
 └── example_data/           # Example data files
-    ├── Tempest(4,5,6)_Test-1.csv
-    └── Tempest Chip 1(Plate 1).csv
+    └── Tempest(4,5,6)_Test-1.csv
 ```
 
 ## Technical Details
