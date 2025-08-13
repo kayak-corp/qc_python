@@ -24,26 +24,47 @@ class DispenserQCAnalyzerFixedBug:
         """Launch user interface to get inputs"""
         root = tk.Tk()
         root.title("Dispenser QC Analyzer - Multi-Chip Version")
-        root.geometry("700x600")
+        root.geometry("800x700")
         
         # Create main frame with scrollbar
         main_frame = tk.Frame(root)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
         
-        canvas = tk.Canvas(main_frame)
+        # Create canvas with proper scrolling
+        canvas = tk.Canvas(main_frame, bg='#e8e8e8')
         scrollbar = tk.Scrollbar(main_frame, orient="vertical", command=canvas.yview)
-        scrollable_frame = tk.Frame(canvas)
+        scrollable_frame = tk.Frame(canvas, bg='#e8e8e8')
         
+        # Configure scrolling
         scrollable_frame.bind(
             "<Configure>",
             lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
         )
         
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        # Bind mouse wheel scrolling
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+        
+        # Create window in canvas and center it
+        canvas_window = canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
         
+        # Function to center the content
+        def center_content(event):
+            canvas_width = event.width
+            frame_width = scrollable_frame.winfo_reqwidth()
+            if frame_width < canvas_width:
+                canvas.coords(canvas_window, (canvas_width - frame_width) // 2, 0)
+        
+        canvas.bind('<Configure>', center_content)
+        
         # File selection
-        tk.Label(scrollable_frame, text="Step 1: Select CSV Data File", font=("Arial", 12, "bold")).pack(pady=10)
+        file_frame = tk.Frame(scrollable_frame, bg='#e8e8e8')
+        file_frame.pack(fill=tk.X, pady=10)
+        
+        tk.Label(file_frame, text="Step 1: Select CSV Data File", font=("Arial", 14, "bold"), bg='#e8e8e8', fg='#2c3e50').pack(pady=10)
         
         file_path = tk.StringVar()
         
@@ -56,29 +77,37 @@ class DispenserQCAnalyzerFixedBug:
                 file_path.set(filename)
                 file_label.config(text=f"Selected: {os.path.basename(filename)}")
         
-        tk.Button(scrollable_frame, text="Browse", command=browse_file).pack(pady=5)
-        file_label = tk.Label(scrollable_frame, text="No file selected", fg="gray")
-        file_label.pack()
+        browse_button = tk.Button(file_frame, text="Browse", command=browse_file, 
+                                bg='#4CAF50', fg='white', font=("Arial", 10, "bold"),
+                                relief=tk.RAISED, padx=20, pady=5)
+        browse_button.pack(pady=10)
+        
+        file_label = tk.Label(file_frame, text="No file selected", fg="#7f8c8d", bg='#e8e8e8', font=("Arial", 9))
+        file_label.pack(pady=5)
         
         # Standard concentrations input
-        tk.Label(scrollable_frame, text="\nStep 2: Enter Standard Curve Concentrations", font=("Arial", 12, "bold")).pack(pady=10)
+        std_frame = tk.Frame(scrollable_frame, bg='#e8e8e8')
+        std_frame.pack(fill=tk.X, pady=15)
+        
+        tk.Label(std_frame, text="Step 2: Enter Standard Curve Concentrations", font=("Arial", 14, "bold"), bg='#e8e8e8', fg='#2c3e50').pack(pady=10)
         
         # Create frame for standard curve options
-        std_curve_frame = tk.Frame(scrollable_frame)
+        std_curve_frame = tk.Frame(std_frame, bg='#e8e8e8')
         std_curve_frame.pack(fill=tk.X, pady=5)
         
         # Half-step dilutions checkbox
         half_step_var = tk.BooleanVar()
         half_step_checkbox = tk.Checkbutton(std_curve_frame, text="Half-step dilutions", 
                                           variable=half_step_var, 
-                                          command=lambda: toggle_concentration_input())
-        half_step_checkbox.pack(anchor=tk.W, pady=2)
+                                          command=lambda: toggle_concentration_input(),
+                                          bg='#e8e8e8', fg='#2c3e50', font=("Arial", 10))
+        half_step_checkbox.pack(anchor=tk.W, pady=5)
         
         # First concentration input (for half-step mode)
-        tk.Label(std_curve_frame, text="First concentration (for half-step mode):").pack(anchor=tk.W)
+        tk.Label(std_curve_frame, text="First concentration (for half-step mode):", bg='#e8e8e8', fg='#34495e', font=("Arial", 10)).pack(anchor=tk.W, pady=2)
         first_conc_var = tk.StringVar(value="600")
-        first_conc_entry = tk.Entry(std_curve_frame, textvariable=first_conc_var, width=20)
-        first_conc_entry.pack(anchor=tk.W, pady=2)
+        first_conc_entry = tk.Entry(std_curve_frame, textvariable=first_conc_var, width=30, font=("Arial", 10), bg='white', fg='black')
+        first_conc_entry.pack(anchor=tk.W, pady=5)
         
         # Add trace to update concentrations when first concentration changes
         def update_half_step_concentrations(*args):
@@ -96,10 +125,10 @@ class DispenserQCAnalyzerFixedBug:
         first_conc_var.trace('w', update_half_step_concentrations)
         
         # Manual input (for manual mode)
-        tk.Label(std_curve_frame, text="Or enter 8 concentrations manually (comma-separated):").pack(anchor=tk.W, pady=(10,0))
+        tk.Label(std_curve_frame, text="Or enter 8 concentrations manually (comma-separated):", bg='#e8e8e8', fg='#34495e', font=("Arial", 10)).pack(anchor=tk.W, pady=(10,0))
         std_concentrations = tk.StringVar(value="600,300,150,75,37.5,18.75,9.375,4.6875")
-        manual_conc_entry = tk.Entry(std_curve_frame, textvariable=std_concentrations, width=50)
-        manual_conc_entry.pack(anchor=tk.W, pady=2)
+        manual_conc_entry = tk.Entry(std_curve_frame, textvariable=std_concentrations, width=60, font=("Arial", 10), bg='white', fg='black')
+        manual_conc_entry.pack(anchor=tk.W, pady=5)
         
         # Function to toggle between manual and half-step modes
         def toggle_concentration_input():
@@ -118,18 +147,25 @@ class DispenserQCAnalyzerFixedBug:
         toggle_concentration_input()
         
         # Target concentration input
-        tk.Label(scrollable_frame, text="\nStep 3: Enter Target Concentration", font=("Arial", 12, "bold")).pack(pady=10)
-        tk.Label(scrollable_frame, text="Expected concentration from dispenser:").pack()
+        target_frame = tk.Frame(scrollable_frame, bg='#e8e8e8')
+        target_frame.pack(fill=tk.X, pady=15)
+        
+        tk.Label(target_frame, text="Step 3: Enter Target Concentration", font=("Arial", 14, "bold"), bg='#e8e8e8', fg='#2c3e50').pack(pady=10)
+        tk.Label(target_frame, text="Expected concentration from dispenser:", bg='#e8e8e8', font=("Arial", 10), fg='#34495e').pack(pady=5)
         
         target_conc = tk.StringVar(value="75")
-        tk.Entry(scrollable_frame, textvariable=target_conc, width=20).pack(pady=5)
+        target_entry = tk.Entry(target_frame, textvariable=target_conc, width=30, font=("Arial", 10), bg='white', fg='black')
+        target_entry.pack(pady=10)
         
         # Liquid handler selection
-        tk.Label(scrollable_frame, text="\nStep 4: Select Liquid Handler", font=("Arial", 12, "bold")).pack(pady=10)
-        tk.Label(scrollable_frame, text="Choose your liquid handler configuration:").pack()
+        handler_frame = tk.Frame(scrollable_frame, bg='#e8e8e8')
+        handler_frame.pack(fill=tk.X, pady=15)
+        
+        tk.Label(handler_frame, text="Step 4: Select Liquid Handler", font=("Arial", 14, "bold"), bg='#e8e8e8', fg='#2c3e50').pack(pady=10)
+        tk.Label(handler_frame, text="Choose your liquid handler configuration:", bg='#e8e8e8', font=("Arial", 10), fg='#34495e').pack(pady=5)
         
         liquid_handler_var = tk.StringVar(value="Tempest")
-        liquid_handler_frame = tk.Frame(scrollable_frame)
+        liquid_handler_frame = tk.Frame(handler_frame, bg='#e8e8e8')
         liquid_handler_frame.pack(fill=tk.X, pady=5)
         
         # Liquid handler options
@@ -149,12 +185,13 @@ class DispenserQCAnalyzerFixedBug:
             var = tk.StringVar(value=handler)
             handler_vars[handler] = var
             rb = tk.Radiobutton(liquid_handler_frame, text=handler, variable=liquid_handler_var, 
-                               value=handler, command=lambda h=handler: update_handler_description(h))
-            rb.pack(anchor=tk.W, pady=1)
+                               value=handler, command=lambda h=handler: update_handler_description(h),
+                               bg='#e8e8e8', fg='#2c3e50', font=("Arial", 10))
+            rb.pack(anchor=tk.W, pady=2)
         
         # Description label
-        handler_desc_label = tk.Label(scrollable_frame, text=handler_descriptions["Tempest"], 
-                                    fg="blue", font=("Arial", 9), wraplength=600)
+        handler_desc_label = tk.Label(handler_frame, text=handler_descriptions["Tempest"], 
+                                    fg="#2980b9", bg='#e8e8e8', font=("Arial", 9), wraplength=600)
         handler_desc_label.pack(pady=5)
         
         def update_handler_description(handler):
@@ -181,18 +218,18 @@ class DispenserQCAnalyzerFixedBug:
                 add_chip_button.pack_forget()
         
         # Chip configuration (conditional based on liquid handler)
-        chip_config_frame = tk.Frame(scrollable_frame)
-        chip_config_frame.pack(fill=tk.X, pady=5)
+        chip_config_frame = tk.Frame(scrollable_frame, bg='#e8e8e8')
+        chip_config_frame.pack(fill=tk.X, pady=15)
         
-        chip_config_label = tk.Label(chip_config_frame, text="\nStep 5: Configure Chips", font=("Arial", 12, "bold"))
+        chip_config_label = tk.Label(chip_config_frame, text="Step 5: Configure Chips", font=("Arial", 14, "bold"), bg='#e8e8e8', fg='#2c3e50')
         chip_config_label.pack(pady=10)
         
-        chip_desc_label = tk.Label(chip_config_frame, text="Each chip has 8 nozzles. Configure which columns each chip dispenses into:")
-        chip_desc_label.pack()
+        chip_desc_label = tk.Label(chip_config_frame, text="Each chip has 8 nozzles. Configure which columns each chip dispenses into:", bg='#e8e8e8', font=("Arial", 10), fg='#34495e')
+        chip_desc_label.pack(pady=5)
         
         # Chip configuration frame
-        chip_frame = tk.Frame(scrollable_frame)
-        chip_frame.pack(fill=tk.X, pady=5)
+        chip_frame = tk.Frame(chip_config_frame, bg='#e8e8e8')
+        chip_frame.pack(fill=tk.X, pady=10)
         
         # Store chip configurations
         chip_configs = []
@@ -219,32 +256,41 @@ class DispenserQCAnalyzerFixedBug:
                         config['frame'].winfo_children()[0].config(text=config['chip_id'])
         
         def create_chip_widget(chip_config):
-            chip_widget_frame = tk.Frame(chip_frame, relief=tk.RAISED, borderwidth=2)
-            chip_widget_frame.pack(fill=tk.X, pady=2)
+            chip_widget_frame = tk.Frame(chip_frame, relief=tk.RAISED, borderwidth=2, bg='white')
+            chip_widget_frame.pack(fill=tk.X, pady=5, padx=10)
             chip_config['frame'] = chip_widget_frame
             
-            chip_header = tk.Frame(chip_widget_frame)
-            chip_header.pack(fill=tk.X, padx=5, pady=2)
+            chip_header = tk.Frame(chip_widget_frame, bg='white')
+            chip_header.pack(fill=tk.X, padx=10, pady=5)
             
-            tk.Label(chip_header, text=chip_config['chip_id'], font=("Arial", 10, "bold")).pack(side=tk.LEFT)
+            tk.Label(chip_header, text=chip_config['chip_id'], font=("Arial", 12, "bold"), bg='white', fg='#2c3e50').pack(side=tk.LEFT)
             
             if len(chip_configs) > 1:
-                tk.Button(chip_header, text="Remove", command=lambda: remove_chip(chip_config), 
-                         bg="red", fg="white", font=("Arial", 8)).pack(side=tk.RIGHT)
+                remove_btn = tk.Button(chip_header, text="Remove", command=lambda: remove_chip(chip_config), 
+                                     bg="#f44336", fg="white", font=("Arial", 9, "bold"),
+                                     relief=tk.RAISED, padx=10, pady=2)
+                remove_btn.pack(side=tk.RIGHT)
             
-            chip_content = tk.Frame(chip_widget_frame)
-            chip_content.pack(fill=tk.X, padx=10, pady=2)
+            chip_content = tk.Frame(chip_widget_frame, bg='white')
+            chip_content.pack(fill=tk.X, padx=15, pady=10)
             
-            tk.Label(chip_content, text="Columns:").pack(side=tk.LEFT)
-            tk.Entry(chip_content, textvariable=chip_config['start_col'], width=5).pack(side=tk.LEFT, padx=2)
-            tk.Label(chip_content, text="to").pack(side=tk.LEFT)
-            tk.Entry(chip_content, textvariable=chip_config['end_col'], width=5).pack(side=tk.LEFT, padx=2)
-            tk.Label(chip_content, text="(1-24)").pack(side=tk.LEFT, padx=5)
+            tk.Label(chip_content, text="Columns:", bg='white', font=("Arial", 10), fg='#2c3e50').pack(side=tk.LEFT)
+            start_entry = tk.Entry(chip_content, textvariable=chip_config['start_col'], width=8, font=("Arial", 10), bg='white', fg='black')
+            start_entry.pack(side=tk.LEFT, padx=5)
+            tk.Label(chip_content, text="to", bg='white', font=("Arial", 10), fg='#2c3e50').pack(side=tk.LEFT, padx=5)
+            end_entry = tk.Entry(chip_content, textvariable=chip_config['end_col'], width=8, font=("Arial", 10), bg='white', fg='black')
+            end_entry.pack(side=tk.LEFT, padx=5)
+            tk.Label(chip_content, text="(1-24)", bg='white', font=("Arial", 9), fg="#7f8c8d").pack(side=tk.LEFT, padx=10)
+        
+        # Buttons frame
+        buttons_frame = tk.Frame(scrollable_frame, bg='#e8e8e8')
+        buttons_frame.pack(fill=tk.X, pady=20)
         
         # Add chip button
-        add_chip_button = tk.Button(scrollable_frame, text="+ Add Another Chip", command=add_chip, 
-                                   bg="blue", fg="white", font=("Arial", 10))
-        add_chip_button.pack(pady=5)
+        add_chip_button = tk.Button(buttons_frame, text="+ Add Another Chip", command=add_chip, 
+                                   bg="#2196F3", fg="white", font=("Arial", 11, "bold"),
+                                   relief=tk.RAISED, padx=20, pady=8)
+        add_chip_button.pack(pady=10)
         
         # Add initial chip
         add_chip()
@@ -321,12 +367,18 @@ class DispenserQCAnalyzerFixedBug:
             except Exception as e:
                 messagebox.showerror("Error", f"An error occurred: {str(e)}")
         
-        tk.Button(scrollable_frame, text="Process Data", command=process_data, 
-                 bg="green", fg="white", font=("Arial", 12, "bold")).pack(pady=20)
+        process_button = tk.Button(buttons_frame, text="Process Data", command=process_data, 
+                                 bg="#4CAF50", fg="white", font=("Arial", 14, "bold"),
+                                 relief=tk.RAISED, padx=30, pady=12)
+        process_button.pack(pady=15)
         
         # Pack canvas and scrollbar
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
+        
+        # Update scroll region after all widgets are created
+        scrollable_frame.update_idletasks()
+        canvas.configure(scrollregion=canvas.bbox("all"))
         
         root.mainloop()
     
