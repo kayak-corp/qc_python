@@ -62,10 +62,60 @@ class DispenserQCAnalyzerFixedBug:
         
         # Standard concentrations input
         tk.Label(scrollable_frame, text="\nStep 2: Enter Standard Curve Concentrations", font=("Arial", 12, "bold")).pack(pady=10)
-        tk.Label(scrollable_frame, text="Enter 8 concentrations (comma-separated):").pack()
         
+        # Create frame for standard curve options
+        std_curve_frame = tk.Frame(scrollable_frame)
+        std_curve_frame.pack(fill=tk.X, pady=5)
+        
+        # Half-step dilutions checkbox
+        half_step_var = tk.BooleanVar()
+        half_step_checkbox = tk.Checkbutton(std_curve_frame, text="Half-step dilutions", 
+                                          variable=half_step_var, 
+                                          command=lambda: toggle_concentration_input())
+        half_step_checkbox.pack(anchor=tk.W, pady=2)
+        
+        # First concentration input (for half-step mode)
+        tk.Label(std_curve_frame, text="First concentration (for half-step mode):").pack(anchor=tk.W)
+        first_conc_var = tk.StringVar(value="600")
+        first_conc_entry = tk.Entry(std_curve_frame, textvariable=first_conc_var, width=20)
+        first_conc_entry.pack(anchor=tk.W, pady=2)
+        
+        # Add trace to update concentrations when first concentration changes
+        def update_half_step_concentrations(*args):
+            if half_step_var.get():
+                try:
+                    first_conc = float(first_conc_var.get())
+                    concentrations = []
+                    for i in range(8):
+                        conc = first_conc / (2 ** i)
+                        concentrations.append(conc)
+                    std_concentrations.set(','.join([f"{c:.6f}" for c in concentrations]))
+                except ValueError:
+                    pass
+        
+        first_conc_var.trace('w', update_half_step_concentrations)
+        
+        # Manual input (for manual mode)
+        tk.Label(std_curve_frame, text="Or enter 8 concentrations manually (comma-separated):").pack(anchor=tk.W, pady=(10,0))
         std_concentrations = tk.StringVar(value="600,300,150,75,37.5,18.75,9.375,4.6875")
-        tk.Entry(scrollable_frame, textvariable=std_concentrations, width=50).pack(pady=5)
+        manual_conc_entry = tk.Entry(std_curve_frame, textvariable=std_concentrations, width=50)
+        manual_conc_entry.pack(anchor=tk.W, pady=2)
+        
+        # Function to toggle between manual and half-step modes
+        def toggle_concentration_input():
+            if half_step_var.get():
+                # Half-step mode: disable manual entry, enable first concentration entry
+                manual_conc_entry.config(state='disabled')
+                first_conc_entry.config(state='normal')
+                # Calculate and display the half-step concentrations
+                update_half_step_concentrations()
+            else:
+                # Manual mode: enable manual entry, disable first concentration entry
+                manual_conc_entry.config(state='normal')
+                first_conc_entry.config(state='disabled')
+        
+        # Initialize the toggle
+        toggle_concentration_input()
         
         # Target concentration input
         tk.Label(scrollable_frame, text="\nStep 3: Enter Target Concentration", font=("Arial", 12, "bold")).pack(pady=10)
@@ -74,9 +124,71 @@ class DispenserQCAnalyzerFixedBug:
         target_conc = tk.StringVar(value="75")
         tk.Entry(scrollable_frame, textvariable=target_conc, width=20).pack(pady=5)
         
-        # Chip configuration
-        tk.Label(scrollable_frame, text="\nStep 4: Configure Chips", font=("Arial", 12, "bold")).pack(pady=10)
-        tk.Label(scrollable_frame, text="Each chip has 8 nozzles. Configure which columns each chip dispenses into:").pack()
+        # Liquid handler selection
+        tk.Label(scrollable_frame, text="\nStep 4: Select Liquid Handler", font=("Arial", 12, "bold")).pack(pady=10)
+        tk.Label(scrollable_frame, text="Choose your liquid handler configuration:").pack()
+        
+        liquid_handler_var = tk.StringVar(value="Tempest")
+        liquid_handler_frame = tk.Frame(scrollable_frame)
+        liquid_handler_frame.pack(fill=tk.X, pady=5)
+        
+        # Liquid handler options
+        handlers = ["D2", "Bravo - 96", "Bravo - 384", "Nano", "Combi", "Tempest"]
+        handler_descriptions = {
+            "D2": "Single nozzle, dispenses to each well (excluding standard curve columns)",
+            "Bravo - 96": "Quadrant stamping (A4,A5 & B4,B5), excluding standard curve columns",
+            "Bravo - 384": "Each nozzle responsible for 1 well, excluding standard curve columns",
+            "Nano": "Single nozzle, dispenses to each well (excluding standard curve columns)",
+            "Combi": "8 nozzles, 2 rows per nozzle (same as Tempest)",
+            "Tempest": "8 nozzles, 2 rows per nozzle (current configuration)"
+        }
+        
+        # Create radio buttons for liquid handler selection
+        handler_vars = {}
+        for handler in handlers:
+            var = tk.StringVar(value=handler)
+            handler_vars[handler] = var
+            rb = tk.Radiobutton(liquid_handler_frame, text=handler, variable=liquid_handler_var, 
+                               value=handler, command=lambda h=handler: update_handler_description(h))
+            rb.pack(anchor=tk.W, pady=1)
+        
+        # Description label
+        handler_desc_label = tk.Label(scrollable_frame, text=handler_descriptions["Tempest"], 
+                                    fg="blue", font=("Arial", 9), wraplength=600)
+        handler_desc_label.pack(pady=5)
+        
+        def update_handler_description(handler):
+            handler_desc_label.config(text=handler_descriptions[handler])
+            update_chip_config_ui(handler)
+        
+        def update_chip_config_ui(handler):
+            """Update chip configuration UI based on liquid handler selection"""
+            if handler in ["Combi", "Tempest"]:
+                # Multi-nozzle handlers - show full chip configuration
+                # Check if widgets are currently hidden and repack them
+                if not chip_config_frame.winfo_ismapped():
+                    chip_config_frame.pack(fill=tk.X, pady=5)
+                if not chip_frame.winfo_ismapped():
+                    chip_frame.pack(fill=tk.X, pady=5)
+                if not add_chip_button.winfo_ismapped():
+                    add_chip_button.pack(pady=5)
+                chip_config_label.config(text="\nStep 5: Configure Chips")
+                chip_desc_label.config(text="Each chip has 8 nozzles. Configure which columns each chip dispenses into:")
+            else:
+                # All other handlers - hide chip configuration
+                chip_config_frame.pack_forget()
+                chip_frame.pack_forget()
+                add_chip_button.pack_forget()
+        
+        # Chip configuration (conditional based on liquid handler)
+        chip_config_frame = tk.Frame(scrollable_frame)
+        chip_config_frame.pack(fill=tk.X, pady=5)
+        
+        chip_config_label = tk.Label(chip_config_frame, text="\nStep 5: Configure Chips", font=("Arial", 12, "bold"))
+        chip_config_label.pack(pady=10)
+        
+        chip_desc_label = tk.Label(chip_config_frame, text="Each chip has 8 nozzles. Configure which columns each chip dispenses into:")
+        chip_desc_label.pack()
         
         # Chip configuration frame
         chip_frame = tk.Frame(scrollable_frame)
@@ -129,12 +241,16 @@ class DispenserQCAnalyzerFixedBug:
             tk.Entry(chip_content, textvariable=chip_config['end_col'], width=5).pack(side=tk.LEFT, padx=2)
             tk.Label(chip_content, text="(1-24)").pack(side=tk.LEFT, padx=5)
         
+        # Add chip button
+        add_chip_button = tk.Button(scrollable_frame, text="+ Add Another Chip", command=add_chip, 
+                                   bg="blue", fg="white", font=("Arial", 10))
+        add_chip_button.pack(pady=5)
+        
         # Add initial chip
         add_chip()
         
-        # Add chip button
-        tk.Button(scrollable_frame, text="+ Add Another Chip", command=add_chip, 
-                 bg="blue", fg="white", font=("Arial", 10)).pack(pady=5)
+        # Initialize description - start with Tempest selected
+        handler_desc_label.config(text=handler_descriptions["Tempest"])
         
         # Process button
         def process_data():
@@ -156,22 +272,45 @@ class DispenserQCAnalyzerFixedBug:
                 # Parse target concentration
                 self.target_concentration = float(target_conc.get())
                 
-                # Parse chip configurations
+                # Get selected liquid handler
+                selected_handler = liquid_handler_var.get()
+                self.liquid_handler = selected_handler
+                
+                # Parse chip configurations based on liquid handler
                 self.chip_configurations = []
-                for chip_config in chip_configs:
-                    try:
-                        start_col = int(chip_config['start_col'].get())
-                        end_col = int(chip_config['end_col'].get())
-                        if start_col < 1 or end_col > 24 or start_col >= end_col:
-                            raise ValueError(f"Invalid column range for {chip_config['chip_id']}")
-                        self.chip_configurations.append({
-                            'chip_id': chip_config['chip_id'],
-                            'start_col': start_col - 1,  # Convert to 0-based indexing
-                            'end_col': end_col - 1
-                        })
-                    except ValueError as e:
-                        messagebox.showerror("Error", f"Invalid column configuration: {str(e)}")
-                        return
+                
+                if selected_handler in ["D2", "Nano"]:
+                    # Single nozzle handlers - no chip configuration needed
+                    self.chip_configurations = [{
+                        'chip_id': 'Single_Nozzle',
+                        'start_col': 3,  # Columns 4-24 (excluding standard curve columns 1-3)
+                        'end_col': 23,
+                        'handler_type': selected_handler
+                    }]
+                elif selected_handler in ["Bravo - 96", "Bravo - 384"]:
+                    # Bravo handlers - use default configuration
+                    self.chip_configurations = [{
+                        'chip_id': f'{selected_handler}_Chip',
+                        'start_col': 3,  # Columns 4-24 (excluding standard curve columns 1-3)
+                        'end_col': 23,
+                        'handler_type': selected_handler
+                    }]
+                else:  # Tempest, Combi - use chip configurations from UI
+                    for chip_config in chip_configs:
+                        try:
+                            start_col = int(chip_config['start_col'].get())
+                            end_col = int(chip_config['end_col'].get())
+                            if start_col < 1 or end_col > 24 or start_col >= end_col:
+                                raise ValueError(f"Invalid column range for {chip_config['chip_id']}")
+                            self.chip_configurations.append({
+                                'chip_id': chip_config['chip_id'],
+                                'start_col': start_col - 1,  # Convert to 0-based indexing
+                                'end_col': end_col - 1,
+                                'handler_type': selected_handler
+                            })
+                        except ValueError as e:
+                            messagebox.showerror("Error", f"Invalid column configuration: {str(e)}")
+                            return
                 
                 # Close UI and process
                 root.destroy()
@@ -372,7 +511,7 @@ class DispenserQCAnalyzerFixedBug:
             return False
     
     def calculate_qc_metrics(self):
-        """Calculate %CV and %Accuracy for each chip and nozzle - Multi-chip version"""
+        """Calculate %CV and %Accuracy for each chip and nozzle - Multi-liquid handler version"""
         try:
             self.qc_results = []
             
@@ -382,61 +521,181 @@ class DispenserQCAnalyzerFixedBug:
                 self.chip_configurations = [{
                     'chip_id': 'Chip_1',
                     'start_col': 3,  # 0-based indexing for columns 4-24
-                    'end_col': 23
+                    'end_col': 23,
+                    'handler_type': 'Tempest'
                 }]
             
             for chip_config in self.chip_configurations:
                 chip_id = chip_config['chip_id']
                 start_col = chip_config['start_col']
                 end_col = chip_config['end_col']
+                handler_type = chip_config.get('handler_type', 'Tempest')
                 
-                # Each chip has 8 nozzles (16 rows total, 2 rows per nozzle)
-                # For chip columns (4-24): Each nozzle uses 2 consecutive rows
-                # Nozzle 1 = Row A & B, Nozzle 2 = Row C & D, etc.
-                nozzle_groups = []
-                for i in range(0, 16, 2):  # 8 nozzles, 2 rows each
-                    nozzle_groups.append({
-                        'nozzle_id': f"{chip_id}_Nozzle_{i//2 + 1}",
-                        'rows': [i, i + 1]  # Use 2 rows per nozzle (e.g., A & B for Nozzle 1)
-                    })
-                
-                for group in nozzle_groups:
-                    # Extract data for this nozzle from the chip's column range
+                if handler_type in ["D2", "Nano"]:
+                    # Single nozzle handlers - analyze all wells as one nozzle
                     nozzle_data = []
-                    for row_idx in group['rows']:
+                    for row_idx in range(len(self.calculated_concentrations)):
                         if row_idx < len(self.calculated_concentrations):
-                            # Get data from the chip's assigned columns
+                            # Get data from all columns except standard curve (columns 1-3)
                             chip_data = self.calculated_concentrations.iloc[row_idx, start_col:end_col+1].dropna()
                             nozzle_data.extend(chip_data.values)
                     
                     if len(nozzle_data) > 0:
-                        # Calculate metrics
                         mean_conc = np.mean(nozzle_data)
                         std_conc = np.std(nozzle_data)
-                        
-                        # %CV = (std_dev / mean) * 100
                         cv_percent = (std_conc / mean_conc) * 100 if mean_conc != 0 else 0
-                        
-                        # %Accuracy = ((mean - target) / target) * 100
                         accuracy_percent = ((mean_conc - self.target_concentration) / self.target_concentration) * 100
                         
-                        # Debug output
                         col_range = f"columns {start_col+1}-{end_col+1}"
-                        print(f"{group['nozzle_id']}: Using {len(nozzle_data)} measurements from {col_range}")
+                        print(f"{chip_id}: Using {len(nozzle_data)} measurements from {col_range}")
                         print(f"  Mean: {mean_conc:.2f}, Std: {std_conc:.2f}, CV: {cv_percent:.2f}%, Accuracy: {accuracy_percent:.2f}%")
                         
                         self.qc_results.append({
-                            'nozzle_id': group['nozzle_id'],
+                            'nozzle_id': f"{chip_id}_Single_Nozzle",
                             'chip_id': chip_id,
                             'mean_concentration': mean_conc,
                             'std_concentration': std_conc,
                             'cv_percent': cv_percent,
                             'accuracy_percent': accuracy_percent,
                             'n_measurements': len(nozzle_data),
-                            'column_range': f"{start_col+1}-{end_col+1}"
+                            'column_range': f"{start_col+1}-{end_col+1}",
+                            'handler_type': handler_type
                         })
+                
+                elif handler_type == "Bravo - 96":
+                    # Bravo 96 - quadrant stamping (A4,A5 & B4,B5 pattern)
+                    # Each quadrant is analyzed separately
+                    quadrants = [
+                        {'name': 'Quadrant_1', 'rows': [0, 1], 'cols': [3, 4]},  # A4, A5, B4, B5
+                        {'name': 'Quadrant_2', 'rows': [0, 1], 'cols': [5, 6]},  # A6, A7, B6, B7
+                        {'name': 'Quadrant_3', 'rows': [2, 3], 'cols': [3, 4]},  # C4, C5, D4, D5
+                        {'name': 'Quadrant_4', 'rows': [2, 3], 'cols': [5, 6]},  # C6, C7, D6, D7
+                        # Continue for all quadrants...
+                    ]
+                    
+                    # Generate all quadrants (4x6 pattern)
+                    quadrants = []
+                    for row_group in range(0, 16, 4):  # 4 rows per group
+                        for col_group in range(3, 24, 2):  # 2 columns per group
+                            quadrants.append({
+                                'name': f'Quadrant_{len(quadrants)+1}',
+                                'rows': [row_group, row_group+1],
+                                'cols': [col_group, col_group+1]
+                            })
+                    
+                    for quadrant in quadrants:
+                        nozzle_data = []
+                        for row_idx in quadrant['rows']:
+                            for col_idx in quadrant['cols']:
+                                if (row_idx < len(self.calculated_concentrations) and 
+                                    col_idx < len(self.calculated_concentrations.columns)):
+                                    val = self.calculated_concentrations.iloc[row_idx, col_idx]
+                                    if pd.notna(val) and val > 0:
+                                        nozzle_data.append(val)
+                        
+                        if len(nozzle_data) > 0:
+                            mean_conc = np.mean(nozzle_data)
+                            std_conc = np.std(nozzle_data)
+                            cv_percent = (std_conc / mean_conc) * 100 if mean_conc != 0 else 0
+                            accuracy_percent = ((mean_conc - self.target_concentration) / self.target_concentration) * 100
+                            
+                            print(f"{chip_id}_{quadrant['name']}: Using {len(nozzle_data)} measurements")
+                            print(f"  Mean: {mean_conc:.2f}, Std: {std_conc:.2f}, CV: {cv_percent:.2f}%, Accuracy: {accuracy_percent:.2f}%")
+                            
+                            self.qc_results.append({
+                                'nozzle_id': f"{chip_id}_{quadrant['name']}",
+                                'chip_id': chip_id,
+                                'mean_concentration': mean_conc,
+                                'std_concentration': std_conc,
+                                'cv_percent': cv_percent,
+                                'accuracy_percent': accuracy_percent,
+                                'n_measurements': len(nozzle_data),
+                                'column_range': f"quadrant_{len(quadrants)}",
+                                'handler_type': handler_type
+                            })
+                
+                elif handler_type == "Bravo - 384":
+                    # Bravo 384 - each nozzle responsible for 1 well
+                    # Analyze each well individually
+                    well_count = 0
+                    for row_idx in range(len(self.calculated_concentrations)):
+                        for col_idx in range(start_col, end_col+1):
+                            if col_idx < len(self.calculated_concentrations.columns):
+                                val = self.calculated_concentrations.iloc[row_idx, col_idx]
+                                if pd.notna(val) and val > 0:
+                                    well_count += 1
+                                    # Each well is its own "nozzle" for QC purposes
+                                    nozzle_id = f"{chip_id}_Well_{well_count}"
+                                    
+                                    # For single well, CV is 0 (no variation within well)
+                                    mean_conc = val
+                                    std_conc = 0
+                                    cv_percent = 0
+                                    accuracy_percent = ((mean_conc - self.target_concentration) / self.target_concentration) * 100
+                                    
+                                    well_pos = f"{chr(65+row_idx)}{col_idx+1}"
+                                    print(f"{nozzle_id} ({well_pos}): Concentration = {mean_conc:.2f}, Accuracy: {accuracy_percent:.2f}%")
+                                    
+                                    self.qc_results.append({
+                                        'nozzle_id': nozzle_id,
+                                        'chip_id': chip_id,
+                                        'mean_concentration': mean_conc,
+                                        'std_concentration': std_conc,
+                                        'cv_percent': cv_percent,
+                                        'accuracy_percent': accuracy_percent,
+                                        'n_measurements': 1,
+                                        'column_range': well_pos,
+                                        'handler_type': handler_type
+                                    })
+                
+                else:  # Tempest, Combi - 8 nozzles, 2 rows per nozzle
+                    # Each chip has 8 nozzles (16 rows total, 2 rows per nozzle)
+                    # Nozzle 1 = Row A & B, Nozzle 2 = Row C & D, etc.
+                    nozzle_groups = []
+                    for i in range(0, 16, 2):  # 8 nozzles, 2 rows each
+                        nozzle_groups.append({
+                            'nozzle_id': f"{chip_id}_Nozzle_{i//2 + 1}",
+                            'rows': [i, i + 1]  # Use 2 rows per nozzle (e.g., A & B for Nozzle 1)
+                        })
+                    
+                    for group in nozzle_groups:
+                        # Extract data for this nozzle from the chip's column range
+                        nozzle_data = []
+                        for row_idx in group['rows']:
+                            if row_idx < len(self.calculated_concentrations):
+                                # Get data from the chip's assigned columns
+                                chip_data = self.calculated_concentrations.iloc[row_idx, start_col:end_col+1].dropna()
+                                nozzle_data.extend(chip_data.values)
+                        
+                        if len(nozzle_data) > 0:
+                            # Calculate metrics
+                            mean_conc = np.mean(nozzle_data)
+                            std_conc = np.std(nozzle_data)
+                            
+                            # %CV = (std_dev / mean) * 100
+                            cv_percent = (std_conc / mean_conc) * 100 if mean_conc != 0 else 0
+                            
+                            # %Accuracy = ((mean - target) / target) * 100
+                            accuracy_percent = ((mean_conc - self.target_concentration) / self.target_concentration) * 100
+                            
+                            # Debug output
+                            col_range = f"columns {start_col+1}-{end_col+1}"
+                            print(f"{group['nozzle_id']}: Using {len(nozzle_data)} measurements from {col_range}")
+                            print(f"  Mean: {mean_conc:.2f}, Std: {std_conc:.2f}, CV: {cv_percent:.2f}%, Accuracy: {accuracy_percent:.2f}%")
+                            
+                            self.qc_results.append({
+                                'nozzle_id': group['nozzle_id'],
+                                'chip_id': chip_id,
+                                'mean_concentration': mean_conc,
+                                'std_concentration': std_conc,
+                                'cv_percent': cv_percent,
+                                'accuracy_percent': accuracy_percent,
+                                'n_measurements': len(nozzle_data),
+                                'column_range': f"{start_col+1}-{end_col+1}",
+                                'handler_type': handler_type
+                            })
             
-            print(f"QC metrics calculated for {len(self.qc_results)} nozzles across {len(self.chip_configurations)} chips")
+            print(f"QC metrics calculated for {len(self.qc_results)} nozzles/quadrants/wells across {len(self.chip_configurations)} chips")
             return True
             
         except Exception as e:
@@ -488,7 +747,23 @@ class DispenserQCAnalyzerFixedBug:
                 
                 # Create separate plots for each chip
                 for chip_id, chip_data in chip_results.items():
-                    nozzle_ids = [r['nozzle_id'].split('_Nozzle_')[1] for r in chip_data]  # Just the nozzle number
+                    # Get handler type for this chip
+                    handler_type = chip_data[0].get('handler_type', 'Tempest')
+                    
+                    # Extract labels based on handler type
+                    if handler_type in ["D2", "Nano"]:
+                        labels = ["Single_Nozzle"]
+                        title_suffix = "Single Nozzle"
+                    elif handler_type == "Bravo - 96":
+                        labels = [r['nozzle_id'].split('_Quadrant_')[1] for r in chip_data]
+                        title_suffix = "Quadrant"
+                    elif handler_type == "Bravo - 384":
+                        labels = [r['nozzle_id'].split('_Well_')[1] for r in chip_data]
+                        title_suffix = "Well"
+                    else:  # Tempest, Combi
+                        labels = [r['nozzle_id'].split('_Nozzle_')[1] for r in chip_data]
+                        title_suffix = "Nozzle"
+                    
                     cv_values = [r['cv_percent'] for r in chip_data]
                     accuracy_values = [r['accuracy_percent'] for r in chip_data]
                     
@@ -499,9 +774,9 @@ class DispenserQCAnalyzerFixedBug:
                     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
                     
                     # CV plot
-                    bars1 = ax1.bar(nozzle_ids, cv_values, color='skyblue')
+                    bars1 = ax1.bar(labels, cv_values, color='skyblue')
                     ax1.set_ylabel('%CV')
-                    ax1.set_title(f'{chip_id} - Nozzle Precision (%CV)')
+                    ax1.set_title(f'{chip_id} - {title_suffix} Precision (%CV)')
                     ax1.grid(True, alpha=0.3)
                     
                     # Add value labels on bars
@@ -514,9 +789,9 @@ class DispenserQCAnalyzerFixedBug:
                     ax1.legend()
                     
                     # Accuracy plot
-                    bars2 = ax2.bar(nozzle_ids, accuracy_values, color='lightcoral')
+                    bars2 = ax2.bar(labels, accuracy_values, color='lightcoral')
                     ax2.set_ylabel('%Accuracy')
-                    ax2.set_title(f'{chip_id} - Nozzle Accuracy (%Accuracy)')
+                    ax2.set_title(f'{chip_id} - {title_suffix} Accuracy (%Accuracy)')
                     ax2.grid(True, alpha=0.3)
                     
                     # Add value labels on bars
@@ -531,7 +806,7 @@ class DispenserQCAnalyzerFixedBug:
                     plt.tight_layout()
                     # Create filename with chip name
                     chip_filename = chip_id.lower().replace(' ', '_').replace('-', '_')
-                    plt.savefig(plots_dir / f'{chip_filename}_nozzle_performance.png', dpi=300, bbox_inches='tight')
+                    plt.savefig(plots_dir / f'{chip_filename}_{title_suffix.lower()}_performance.png', dpi=300, bbox_inches='tight')
                     plt.close()
                 
                 # Also create a combined plot for all chips (optional)
@@ -544,12 +819,27 @@ class DispenserQCAnalyzerFixedBug:
                     overall_mean_cv = np.mean(all_cv_values)
                     overall_mean_accuracy = np.mean(all_accuracy_values)
                     
+                    # Determine title suffix based on handler types
+                    handler_types = set(r.get('handler_type', 'Tempest') for r in self.qc_results)
+                    if len(handler_types) == 1:
+                        handler_type = list(handler_types)[0]
+                        if handler_type in ["D2", "Nano"]:
+                            title_suffix = "Single Nozzle"
+                        elif handler_type == "Bravo - 96":
+                            title_suffix = "Quadrant"
+                        elif handler_type == "Bravo - 384":
+                            title_suffix = "Well"
+                        else:
+                            title_suffix = "Nozzle"
+                    else:
+                        title_suffix = "Component"
+                    
                     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 6))
                     
                     # CV plot
                     bars1 = ax1.bar(all_nozzle_ids, all_cv_values, color='skyblue')
                     ax1.set_ylabel('%CV')
-                    ax1.set_title('All Chips - Nozzle Precision (%CV)')
+                    ax1.set_title(f'All Chips - {title_suffix} Precision (%CV)')
                     ax1.grid(True, alpha=0.3)
                     ax1.tick_params(axis='x', rotation=45)
                     
@@ -565,7 +855,7 @@ class DispenserQCAnalyzerFixedBug:
                     # Accuracy plot
                     bars2 = ax2.bar(all_nozzle_ids, all_accuracy_values, color='lightcoral')
                     ax2.set_ylabel('%Accuracy')
-                    ax2.set_title('All Chips - Nozzle Accuracy (%Accuracy)')
+                    ax2.set_title(f'All Chips - {title_suffix} Accuracy (%Accuracy)')
                     ax2.grid(True, alpha=0.3)
                     ax2.tick_params(axis='x', rotation=45)
                     
@@ -579,7 +869,7 @@ class DispenserQCAnalyzerFixedBug:
                     ax2.legend()
                     
                     plt.tight_layout()
-                    plt.savefig(plots_dir / 'all_chips_nozzle_performance.png', dpi=300, bbox_inches='tight')
+                    plt.savefig(plots_dir / f'all_chips_{title_suffix.lower().replace(" ", "_")}_performance.png', dpi=300, bbox_inches='tight')
                     plt.close()
             
             print(f"Plots saved to: {plots_dir}")
@@ -747,7 +1037,20 @@ class DispenserQCAnalyzerFixedBug:
         
         print(f"Standard Curve R²: {self.standard_curve_params['r_squared']:.4f}")
         print(f"Target Concentration: {self.target_concentration}")
-        print("\nNozzle Performance:")
+        print(f"Liquid Handler: {getattr(self, 'liquid_handler', 'Tempest')}")
+        
+        # Determine performance label based on handler type
+        handler_type = getattr(self, 'liquid_handler', 'Tempest')
+        if handler_type in ["D2", "Nano"]:
+            performance_label = "Single Nozzle Performance"
+        elif handler_type == "Bravo - 96":
+            performance_label = "Quadrant Performance"
+        elif handler_type == "Bravo - 384":
+            performance_label = "Well Performance"
+        else:
+            performance_label = "Nozzle Performance"
+        
+        print(f"\n{performance_label}:")
         print("-" * 70)
         
         # Group results by chip
@@ -762,12 +1065,28 @@ class DispenserQCAnalyzerFixedBug:
             print(f"\n{chip_id}:")
             for result in results:
                 nozzle_id = result['nozzle_id']
-                if '_Nozzle_' in nozzle_id:
-                    nozzle_name = nozzle_id.split('_Nozzle_')[1]
-                else:
-                    nozzle_name = nozzle_id
+                handler_type = result.get('handler_type', 'Tempest')
                 
-                print(f"  {nozzle_name:8} | "
+                # Extract component name based on handler type
+                if handler_type in ["D2", "Nano"]:
+                    component_name = "Single"
+                elif handler_type == "Bravo - 96":
+                    if '_Quadrant_' in nozzle_id:
+                        component_name = f"Q{nozzle_id.split('_Quadrant_')[1]}"
+                    else:
+                        component_name = nozzle_id
+                elif handler_type == "Bravo - 384":
+                    if '_Well_' in nozzle_id:
+                        component_name = f"W{nozzle_id.split('_Well_')[1]}"
+                    else:
+                        component_name = nozzle_id
+                else:  # Tempest, Combi
+                    if '_Nozzle_' in nozzle_id:
+                        component_name = f"N{nozzle_id.split('_Nozzle_')[1]}"
+                    else:
+                        component_name = nozzle_id
+                
+                print(f"  {component_name:8} | "
                       f"CV: {result['cv_percent']:6.2f}% | "
                       f"Accuracy: {result['accuracy_percent']:8.2f}% | "
                       f"N: {result['n_measurements']:3d} | "

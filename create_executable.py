@@ -24,24 +24,40 @@ def create_executable():
     print("🔨 Creating standalone executable...")
     
     # PyInstaller command
+    import platform
+    
+    # Use correct path separator for OS
+    if platform.system() == "Windows":
+        data_path = "example_data;example_data"
+    else:
+        data_path = "example_data:example_data"
+    
     cmd = [
         "pyinstaller",
         "--onefile",                    # Single executable file
         "--windowed",                   # No console window (for GUI)
         "--name=DispenserQCAnalyzer",   # Executable name
-        "--add-data=example_data;example_data",  # Include example data
-        "--icon=icon.ico",              # Add icon if available
+        f"--add-data={data_path}",      # Include example data
         "qc_check.py"
     ]
     
-    # Remove icon if not available
-    if not os.path.exists("icon.ico"):
-        cmd.remove("--icon=icon.ico")
+    # Add icon if available
+    if os.path.exists("icon.ico"):
+        cmd.append("--icon=icon.ico")
     
     try:
         subprocess.check_call(cmd)
         print("✅ Executable created successfully!")
-        print(f"📁 Location: dist/DispenserQCAnalyzer.exe")
+        
+        # Check what was actually created based on OS
+        if platform.system() == "Windows":
+            exe_name = "DispenserQCAnalyzer.exe"
+        elif platform.system() == "Darwin":  # macOS
+            exe_name = "DispenserQCAnalyzer"
+        else:  # Linux
+            exe_name = "DispenserQCAnalyzer"
+            
+        print(f"📁 Location: dist/{exe_name}")
     except subprocess.CalledProcessError as e:
         print(f"❌ Error creating executable: {e}")
         return False
@@ -56,9 +72,17 @@ def create_distribution_package():
     dist_dir = Path("distribution")
     dist_dir.mkdir(exist_ok=True)
     
-    # Copy executable
-    if os.path.exists("dist/DispenserQCAnalyzer.exe"):
-        shutil.copy("dist/DispenserQCAnalyzer.exe", dist_dir)
+    # Copy executable (handle different OS names)
+    import platform
+    if platform.system() == "Windows":
+        exe_name = "DispenserQCAnalyzer.exe"
+    elif platform.system() == "Darwin":  # macOS
+        exe_name = "DispenserQCAnalyzer"
+    else:  # Linux
+        exe_name = "DispenserQCAnalyzer"
+    
+    if os.path.exists(f"dist/{exe_name}"):
+        shutil.copy(f"dist/{exe_name}", dist_dir)
     
     # Copy example data
     example_dir = dist_dir / "example_data"
