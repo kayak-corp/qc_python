@@ -78,7 +78,7 @@ class DispenserQCAnalyzerFixedBug:
                 file_label.config(text=f"Selected: {os.path.basename(filename)}")
         
         browse_button = tk.Button(file_frame, text="Browse", command=browse_file, 
-                                bg='#4CAF50', fg='white', font=("Arial", 10, "bold"),
+                                bg='white', fg='#2c3e50', font=("Arial", 10, "bold"),
                                 relief=tk.RAISED, padx=20, pady=5)
         browse_button.pack(pady=10)
         
@@ -198,28 +198,11 @@ class DispenserQCAnalyzerFixedBug:
             handler_desc_label.config(text=handler_descriptions[handler])
             update_chip_config_ui(handler)
         
-        def update_chip_config_ui(handler):
-            """Update chip configuration UI based on liquid handler selection"""
-            if handler in ["Combi", "Tempest"]:
-                # Multi-nozzle handlers - show full chip configuration
-                # Check if widgets are currently hidden and repack them
-                if not chip_config_frame.winfo_ismapped():
-                    chip_config_frame.pack(fill=tk.X, pady=5)
-                if not chip_frame.winfo_ismapped():
-                    chip_frame.pack(fill=tk.X, pady=5)
-                if not add_chip_button.winfo_ismapped():
-                    add_chip_button.pack(pady=5)
-                chip_config_label.config(text="\nStep 5: Configure Chips")
-                chip_desc_label.config(text="Each chip has 8 nozzles. Configure which columns each chip dispenses into:")
-            else:
-                # All other handlers - hide chip configuration
-                chip_config_frame.pack_forget()
-                chip_frame.pack_forget()
-                add_chip_button.pack_forget()
+
         
         # Chip configuration (conditional based on liquid handler)
         chip_config_frame = tk.Frame(scrollable_frame, bg='#e8e8e8')
-        chip_config_frame.pack(fill=tk.X, pady=15)
+        # Don't pack initially - will be packed by update_chip_config_ui when needed
         
         chip_config_label = tk.Label(chip_config_frame, text="Step 5: Configure Chips", font=("Arial", 14, "bold"), bg='#e8e8e8', fg='#2c3e50')
         chip_config_label.pack(pady=10)
@@ -282,21 +265,36 @@ class DispenserQCAnalyzerFixedBug:
             end_entry.pack(side=tk.LEFT, padx=5)
             tk.Label(chip_content, text="(1-24)", bg='white', font=("Arial", 9), fg="#7f8c8d").pack(side=tk.LEFT, padx=10)
         
+        # Initialize description - start with Tempest selected
+        handler_desc_label.config(text=handler_descriptions["Tempest"])
+        
         # Buttons frame
         buttons_frame = tk.Frame(scrollable_frame, bg='#e8e8e8')
         buttons_frame.pack(fill=tk.X, pady=20)
         
+        def update_chip_config_ui(handler):
+            """Update chip configuration UI based on liquid handler selection"""
+            if handler in ["Combi", "Tempest"]:
+                # Multi-nozzle handlers - show full chip configuration
+                # Pack chip config frame before buttons frame
+                chip_config_frame.pack(fill=tk.X, pady=15, before=buttons_frame)
+                chip_config_label.config(text="Step 5: Configure Chips")
+                chip_desc_label.config(text="Each chip has 8 nozzles. Configure which columns each chip dispenses into:")
+            else:
+                # All other handlers - hide chip configuration
+                chip_config_frame.pack_forget()
+        
         # Add chip button
         add_chip_button = tk.Button(buttons_frame, text="+ Add Another Chip", command=add_chip, 
-                                   bg="#2196F3", fg="white", font=("Arial", 11, "bold"),
+                                   bg="white", fg='#2c3e50', font=("Arial", 11, "bold"),
                                    relief=tk.RAISED, padx=20, pady=8)
         add_chip_button.pack(pady=10)
         
         # Add initial chip
         add_chip()
         
-        # Initialize description - start with Tempest selected
-        handler_desc_label.config(text=handler_descriptions["Tempest"])
+        # Initialize chip config UI for Tempest (default selection)
+        update_chip_config_ui("Tempest")
         
         # Process button
         def process_data():
@@ -368,7 +366,7 @@ class DispenserQCAnalyzerFixedBug:
                 messagebox.showerror("Error", f"An error occurred: {str(e)}")
         
         process_button = tk.Button(buttons_frame, text="Process Data", command=process_data, 
-                                 bg="#4CAF50", fg="white", font=("Arial", 14, "bold"),
+                                 bg="white", fg='#2c3e50', font=("Arial", 14, "bold"),
                                  relief=tk.RAISED, padx=30, pady=12)
         process_button.pack(pady=15)
         
@@ -754,11 +752,16 @@ class DispenserQCAnalyzerFixedBug:
             print(f"Error calculating QC metrics: {str(e)}")
             return False
     
-    def generate_plots(self, output_dir):
+    def generate_plots(self, output_dir, csv_filename=None):
         """Generate visualization plots"""
         try:
-            # Create plots directory
-            plots_dir = Path(output_dir) / "plots"
+            # Create plots directory with filename-based naming
+            if csv_filename:
+                # Extract filename without extension and append "-plots"
+                base_name = Path(csv_filename).stem
+                plots_dir = Path(output_dir) / f"{base_name}-plots"
+            else:
+                plots_dir = Path(output_dir) / "plots"
             plots_dir.mkdir(exist_ok=True)
             
             # 1. Standard curve plot
@@ -1074,7 +1077,7 @@ class DispenserQCAnalyzerFixedBug:
         # Step 6: Generate plots (optional)
         if generate_plots:
             print("Step 6: Generating plots...")
-            self.generate_plots(Path(csv_file).parent)
+            self.generate_plots(Path(csv_file).parent, csv_file)
         
         # Display summary
         self.display_summary()
