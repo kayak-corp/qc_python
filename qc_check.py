@@ -85,6 +85,32 @@ class DispenserQCAnalyzerFixedBug:
         file_label = tk.Label(file_frame, text="No file selected", fg="#7f8c8d", bg='#e8e8e8', font=("Arial", 9))
         file_label.pack(pady=5)
         
+        # Standard curve file selection (for Bravo 384)
+        std_curve_file_frame = tk.Frame(scrollable_frame, bg='#e8e8e8')
+        # Don't pack initially - will be packed when Bravo 384 is selected
+        
+        tk.Label(std_curve_file_frame, text="Step 1.5: Select Standard Curve CSV File (Bravo 384)", font=("Arial", 14, "bold"), bg='#e8e8e8', fg='#2c3e50').pack(pady=10)
+        tk.Label(std_curve_file_frame, text="For Bravo 384: Select a separate CSV file containing standard curve data in the first 3 columns", bg='#e8e8e8', font=("Arial", 10), fg='#34495e').pack(pady=5)
+        
+        std_curve_file_path = tk.StringVar()
+        
+        def browse_std_curve_file():
+            filename = filedialog.askopenfilename(
+                title="Select Standard Curve CSV file",
+                filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
+            )
+            if filename:
+                std_curve_file_path.set(filename)
+                std_curve_file_label.config(text=f"Selected: {os.path.basename(filename)}")
+        
+        std_curve_browse_button = tk.Button(std_curve_file_frame, text="Browse Standard Curve File", command=browse_std_curve_file, 
+                                          bg='white', fg='#2c3e50', font=("Arial", 10, "bold"),
+                                          relief=tk.RAISED, padx=20, pady=5)
+        std_curve_browse_button.pack(pady=10)
+        
+        std_curve_file_label = tk.Label(std_curve_file_frame, text="No standard curve file selected", fg="#7f8c8d", bg='#e8e8e8', font=("Arial", 9))
+        std_curve_file_label.pack(pady=5)
+        
         # Standard concentrations input
         std_frame = tk.Frame(scrollable_frame, bg='#e8e8e8')
         std_frame.pack(fill=tk.X, pady=15)
@@ -173,7 +199,7 @@ class DispenserQCAnalyzerFixedBug:
         handler_descriptions = {
             "D2": "Single nozzle, dispenses to each well (excluding standard curve columns)",
             "Bravo - 96": "Quadrant stamping (A4,A5 & B4,B5), excluding standard curve columns",
-            "Bravo - 384": "Each nozzle responsible for 1 well, excluding standard curve columns",
+            "Bravo - 384": "Each nozzle responsible for 1 well, uses separate standard curve file",
             "Nano": "Single nozzle, dispenses to each well (excluding standard curve columns)",
             "Combi": "8 nozzles, 2 rows per nozzle (same as Tempest)",
             "Tempest": "8 nozzles, 2 rows per nozzle (current configuration)"
@@ -197,6 +223,12 @@ class DispenserQCAnalyzerFixedBug:
         def update_handler_description(handler):
             handler_desc_label.config(text=handler_descriptions[handler])
             update_chip_config_ui(handler)
+            
+            # Show/hide standard curve file selection for Bravo 384
+            if handler == "Bravo - 384":
+                std_curve_file_frame.pack(fill=tk.X, pady=10, after=file_frame)
+            else:
+                std_curve_file_frame.pack_forget()
         
 
         
@@ -305,6 +337,14 @@ class DispenserQCAnalyzerFixedBug:
                     messagebox.showerror("Error", "Please select a CSV file")
                     return
                 
+                # Get standard curve file for Bravo 384
+                std_curve_file = std_curve_file_path.get()
+                selected_handler = liquid_handler_var.get()
+                
+                if selected_handler == "Bravo - 384" and not std_curve_file:
+                    messagebox.showerror("Error", "Please select a standard curve CSV file for Bravo 384")
+                    return
+                
                 # Parse standard concentrations
                 std_conc_str = std_concentrations.get()
                 self.standard_concentrations = [float(x.strip()) for x in std_conc_str.split(",")]
@@ -358,7 +398,7 @@ class DispenserQCAnalyzerFixedBug:
                 
                 # Close UI and process
                 root.destroy()
-                self.process_qc_analysis(csv_file)
+                self.process_qc_analysis(csv_file, std_curve_file if selected_handler == "Bravo - 384" else None)
                 
             except ValueError as e:
                 messagebox.showerror("Error", f"Invalid input: {str(e)}")
@@ -397,37 +437,36 @@ class DispenserQCAnalyzerFixedBug:
         
         return pd.DataFrame(data)
     
-    def load_and_clean_data(self, csv_file):
-        """Load and clean the CSV data for Tempest format"""
+    def load_standard_curve_from_file(self, std_curve_file):
+        """Load standard curve data from a separate CSV file for Bravo 384"""
         try:
-            # Read the CSV file manually to handle complex format
-            self.raw_data = self.read_csv_manual(csv_file)
+            # Read the standard curve CSV file
+            std_curve_raw_data = self.read_csv_manual(std_curve_file)
             
-            print(f"Raw data shape: {self.raw_data.shape}")
+            print(f"Standard curve file shape: {std_curve_raw_data.shape}")
             
             # Find the fluorescence data section
             fluorescence_start = None
-            for i, row in self.raw_data.iterrows():
+            for i, row in std_curve_raw_data.iterrows():
                 if pd.notna(row[0]) and "Results for Fluorescein" in str(row[0]):
                     fluorescence_start = i + 1
                     break
             
             if fluorescence_start is None:
-                raise ValueError("Could not find fluorescence data section")
+                raise ValueError("Could not find fluorescence data section in standard curve file")
             
-            print(f"Found fluorescence data starting at row {fluorescence_start}")
+            print(f"Found fluorescence data starting at row {fluorescence_start} in standard curve file")
             
-            # Extract fluorescence data (16 rows, 24 columns) - START FROM ROW + 1
-            # Row + 0 is the header row, Row + 1 is the actual data
-            fluorescence_data = self.raw_data.iloc[fluorescence_start+1:fluorescence_start+17, 1:25].copy()
+            # Extract fluorescence data from first 3 columns (16 rows, 3 columns)
+            fluorescence_data = std_curve_raw_data.iloc[fluorescence_start+1:fluorescence_start+17, 1:4].copy()
             
             # Convert to numeric
             for col in fluorescence_data.columns:
                 fluorescence_data[col] = pd.to_numeric(fluorescence_data[col], errors='coerce')
             
-            self.fluorescence_data = fluorescence_data
+            print(f"Standard curve fluorescence data shape: {fluorescence_data.shape}")
             
-            # Extract standard curve data from the correct wells
+            # Extract standard curve data from the first 3 columns
             # STD1-STD8 are in the first 3 columns of every other row (A, C, E, G, I, K, M, O)
             standard_curve_wells = []
             standard_curve_rfu = []
@@ -467,12 +506,104 @@ class DispenserQCAnalyzerFixedBug:
                         rfu_values.append(median_rfu)
                         print(f"STD{i+1} median RFU: {median_rfu}, Concentration: {self.standard_concentrations[i]}")
                 
-                self.standard_curve_data = pd.DataFrame({
+                return pd.DataFrame({
                     'concentration': concentrations,
                     'fluorescence': rfu_values
                 })
             else:
-                raise ValueError(f"Insufficient standard curve wells found: {len(standard_curve_wells)}")
+                raise ValueError(f"Insufficient standard curve wells found in separate file: {len(standard_curve_wells)}")
+                
+        except Exception as e:
+            print(f"Error loading standard curve data from file: {str(e)}")
+            print("\nTroubleshooting tips:")
+            print("1. Check that your standard curve CSV file has the correct format")
+            print("2. Ensure the file contains 'Results for Fluorescein' section")
+            print("3. Verify that standard curve wells (first 3 columns) contain valid data")
+            print("4. Check for any special characters or encoding issues")
+            raise
+    
+    def load_and_clean_data(self, csv_file, std_curve_file=None):
+        """Load and clean the CSV data for Tempest format"""
+        try:
+            # Read the CSV file manually to handle complex format
+            self.raw_data = self.read_csv_manual(csv_file)
+            
+            print(f"Raw data shape: {self.raw_data.shape}")
+            
+            # Find the fluorescence data section
+            fluorescence_start = None
+            for i, row in self.raw_data.iterrows():
+                if pd.notna(row[0]) and "Results for Fluorescein" in str(row[0]):
+                    fluorescence_start = i + 1
+                    break
+            
+            if fluorescence_start is None:
+                raise ValueError("Could not find fluorescence data section")
+            
+            print(f"Found fluorescence data starting at row {fluorescence_start}")
+            
+            # Extract fluorescence data (16 rows, 24 columns) - START FROM ROW + 1
+            # Row + 0 is the header row, Row + 1 is the actual data
+            fluorescence_data = self.raw_data.iloc[fluorescence_start+1:fluorescence_start+17, 1:25].copy()
+            
+            # Convert to numeric
+            for col in fluorescence_data.columns:
+                fluorescence_data[col] = pd.to_numeric(fluorescence_data[col], errors='coerce')
+            
+            self.fluorescence_data = fluorescence_data
+            
+            # Extract standard curve data
+            if std_curve_file:
+                # For Bravo 384: Use separate standard curve file
+                print(f"Loading standard curve data from separate file: {std_curve_file}")
+                self.standard_curve_data = self.load_standard_curve_from_file(std_curve_file)
+            else:
+                # For other handlers: Extract from main file (first 3 columns)
+                print("Extracting standard curve data from main file (first 3 columns)")
+                standard_curve_wells = []
+                standard_curve_rfu = []
+                
+                # Map of standard curve wells: A1, A2, A3, C1, C2, C3, E1, E2, E3, etc.
+                row_indices = [0, 2, 4, 6, 8, 10, 12, 14]  # A, C, E, G, I, K, M, O
+                col_indices = [0, 1, 2]  # Columns 1, 2, 3
+                
+                for i, row_idx in enumerate(row_indices):
+                    std_conc = self.standard_concentrations[i]
+                    for col_idx in col_indices:
+                        if row_idx < len(fluorescence_data) and col_idx < len(fluorescence_data.columns):
+                            rfu_value = fluorescence_data.iloc[row_idx, col_idx]
+                            if pd.notna(rfu_value) and rfu_value > 0:
+                                well_id = f"{chr(65+row_idx)}{col_idx+1}"
+                                standard_curve_wells.append(well_id)
+                                standard_curve_rfu.append(rfu_value)
+                                print(f"STD{i+1} well {well_id}: RFU = {rfu_value}, Conc = {std_conc}")
+                
+                print(f"Found {len(standard_curve_wells)} standard curve wells: {standard_curve_wells}")
+                print(f"Standard curve RFU values: {standard_curve_rfu}")
+                
+                # Create standard curve data using the provided concentrations
+                # We need to match concentrations to the wells we found
+                if len(standard_curve_rfu) >= 8:
+                    # Use the first 8 wells (3 wells each for STD1-STD8)
+                    concentrations = []
+                    rfu_values = []
+                    
+                    for i in range(8):
+                        # Get the 3 wells for each standard
+                        start_idx = i * 3
+                        if start_idx + 2 < len(standard_curve_rfu):
+                            # Use median of the 3 wells for each standard (more robust to outliers)
+                            median_rfu = np.median(standard_curve_rfu[start_idx:start_idx+3])
+                            concentrations.append(self.standard_concentrations[i])
+                            rfu_values.append(median_rfu)
+                            print(f"STD{i+1} median RFU: {median_rfu}, Concentration: {self.standard_concentrations[i]}")
+                    
+                    self.standard_curve_data = pd.DataFrame({
+                        'concentration': concentrations,
+                        'fluorescence': rfu_values
+                    })
+                else:
+                    raise ValueError(f"Insufficient standard curve wells found: {len(standard_curve_wells)}")
             
             print(f"Standard curve data: {len(self.standard_curve_data)} points")
             print(f"Standard curve concentrations: {self.standard_curve_data['concentration'].tolist()}")
@@ -1038,14 +1169,14 @@ class DispenserQCAnalyzerFixedBug:
             print(f"Error generating output file: {str(e)}")
             return None
     
-    def process_qc_analysis(self, csv_file, generate_plots=True):
+    def process_qc_analysis(self, csv_file, std_curve_file=None, generate_plots=True):
         """Main processing workflow"""
         print("Starting Dispenser QC Analysis (Fixed Bug Version)...")
         print("=" * 50)
         
         # Step 1: Load and clean data
         print("Step 1: Loading and cleaning data...")
-        if not self.load_and_clean_data(csv_file):
+        if not self.load_and_clean_data(csv_file, std_curve_file):
             print("Failed to load data")
             return False
         
